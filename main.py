@@ -1,4 +1,3 @@
-
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -24,7 +23,6 @@ def compute_accelerations(positions, masses):
                 )
 
     return accelerations
-
 
 def rk4_step(positions, velocities, masses, dt):
     k1_v = compute_accelerations(positions, masses)
@@ -55,11 +53,23 @@ def rk4_step(positions, velocities, masses, dt):
 
     return new_positions, new_velocities
 
+def euler_step(positions, velocities, masses, dt):
+    # 1. Calculate current accelerations based on current positions
+    accelerations = compute_accelerations(positions, masses)
+    
+    # 2. Update positions using current velocities
+    new_positions = positions + velocities * dt
+    
+    # 3. Update velocities using current accelerations
+    new_velocities = velocities + accelerations * dt
+    
+    return new_positions, new_velocities
+
 
 # Initialization
 masses = np.array([1.0, 3.003e-6, 3.213e-7, 0.0])
 
-positions = np.array([
+initial_positions = np.array([
     [0.0, 0.0, 0.0],       # Sun
     [1.0, 0.0, 0.0],       # Earth
     [1.524, 0.0, 0.0],     # Mars
@@ -68,66 +78,52 @@ positions = np.array([
 
 v_earth = np.sqrt(G / 1.0)
 v_mars = np.sqrt(G / 1.524)
-
 v_spacecraft = v_earth + 0.6
 
-velocities = np.array([
+initial_velocities = np.array([
     [0.0, 0.0, 0.0],
     [0.0, v_earth, 0.0],
     [0.0, v_mars, 0.0],
     [0.0, v_spacecraft, 0.0]
 ])
 
-# Simulation parameters
+# Initialize separate state arrays for RK4 and Euler tracking
+positions_rk4 = initial_positions.copy()
+velocities_rk4 = initial_velocities.copy()
+
+positions_euler = initial_positions.copy()
+velocities_euler = initial_velocities.copy()
+
+
+
+# Simulation Parameters
 dt = 0.001
-total_time = 1.0
-num_steps = int(total_time / dt)
-
-history_pos = np.zeros((num_steps, len(masses), 3))
-
-# Simulation loop
-for step in range(num_steps):
-    history_pos[step] = positions
-    positions, velocities = rk4_step(
-        positions, velocities, masses, dt
-    )
+steps = 1500  # Roughly 1.5 simulated years
 
 
-# 3D Visualization
-def plot_3d_trajectory(history_pos):
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection='3d')
+history_rk4 = np.zeros((steps, 4, 3))
 
-    labels = ['Sun', 'Earth', 'Mars', 'Spaceship']
-    colors = ['orange', 'blue', 'red', 'green']
-    sizes = [300, 100, 80, 50]
+# Simulation Loop
+for step in range(steps):
+    history_rk4[step] = positions_rk4
+    positions_rk4, velocities_rk4 = rk4_step(positions_rk4, velocities_rk4, masses, dt)
+    positions_euler, velocities_euler = euler_step(positions_euler, velocities_euler, masses, dt)
 
-    for i in range(len(labels)):
-        x = history_pos[:, i, 0]
-        y = history_pos[:, i, 1]
-        z = history_pos[:, i, 2]
+# Visualization
+plt.figure(figsize=(10, 8))
 
-        ax.plot(
-            x, y, z,
-            label=f'{labels[i]} Path',
-            color=colors[i]
-        )
+# 1. Plot the Sun as a single static marker (only its initial position)
+plt.plot(history_rk4[0, 0, 0], history_rk4[0, 0, 1], 'yo', markersize=15, label='Sun}')
 
-        ax.scatter(
-            x[-1], y[-1], z[-1],
-            color=colors[i],
-            s=sizes[i],
-            edgecolors='black'
-        )
+# 2. Plot continuous paths for the moving bodies
+plt.plot(history_rk4[:, 1, 0], history_rk4[:, 1, 1], 'b-', label='Earth Path')
+plt.plot(history_rk4[:, 2, 0], history_rk4[:, 2, 1], 'r-', label='Mars Path')
+plt.plot(history_rk4[:, 3, 0], history_rk4[:, 3, 1], 'g--', label='Spaceship Path')
 
-    ax.set_title("Earth to Mars Transfer")
-    ax.set_xlabel("X Position (AU)")
-    ax.set_ylabel("Y Position (AU)")
-    ax.set_zlabel("Z Position (AU)")
-
-    ax.legend()
-    plt.tight_layout()
-    plt.show()
-
-
-plot_3d_trajectory(history_pos)
+plt.title('Orbital Simulation: Spaceship Transfer')
+plt.xlabel('x (AU)')
+plt.ylabel('y (AU)')
+plt.legend()
+plt.grid(True)
+plt.axis('equal') # Ensures circular orbits aren't visually distorted
+plt.show()
