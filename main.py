@@ -7,6 +7,9 @@ G = 4 * np.pi**2
 def compute_accelerations(positions, masses):
     N = len(masses)
     accelerations = np.zeros((N, 3))
+    
+    # Softening parameter to prevent infinite gravitational acceleration during close encounters
+    epsilon = 0.05 
 
     for i in range(N):
         for j in range(N):
@@ -14,12 +17,9 @@ def compute_accelerations(positions, masses):
                 r_vec = positions[j] - positions[i]
                 r_mag = np.linalg.norm(r_vec)
 
-                # Avoid division by zero
-                if r_mag < 1e-10:
-                    continue
-
+                # Modified gravitational formula with softening
                 accelerations[i] += (
-                    G * masses[j] * r_vec / r_mag**3
+                    G * masses[j] * r_vec / (r_mag**2 + epsilon**2)**1.5
                 )
 
     return accelerations
@@ -54,15 +54,9 @@ def rk4_step(positions, velocities, masses, dt):
     return new_positions, new_velocities
 
 def euler_step(positions, velocities, masses, dt):
-    # 1. Calculate current accelerations based on current positions
     accelerations = compute_accelerations(positions, masses)
-    
-    # 2. Update positions using current velocities
     new_positions = positions + velocities * dt
-    
-    # 3. Update velocities using current accelerations
     new_velocities = velocities + accelerations * dt
-    
     return new_positions, new_velocities
 
 
@@ -73,12 +67,17 @@ initial_positions = np.array([
     [0.0, 0.0, 0.0],       # Sun
     [1.0, 0.0, 0.0],       # Earth
     [1.524, 0.0, 0.0],     # Mars
-    [1.0, 0.0001, 0.0]     # Spaceship, slightly offset
+    [1.0, 0.0, 0.0]        # Spaceship starts at Earth
 ])
 
 v_earth = np.sqrt(G / 1.0)
 v_mars = np.sqrt(G / 1.524)
-v_spacecraft = v_earth + 0.6
+
+# Hohmann Transfer Calculation
+r1 = 1.0      
+r2 = 1.524    
+a_transfer = (r1 + r2) / 2.0  
+v_spacecraft = np.sqrt(G * (2.0 / r1 - 1.0 / a_transfer)) 
 
 initial_velocities = np.array([
     [0.0, 0.0, 0.0],
@@ -87,43 +86,46 @@ initial_velocities = np.array([
     [0.0, v_spacecraft, 0.0]
 ])
 
-# Initialize separate state arrays for RK4 and Euler tracking
 positions_rk4 = initial_positions.copy()
 velocities_rk4 = initial_velocities.copy()
 
 positions_euler = initial_positions.copy()
 velocities_euler = initial_velocities.copy()
 
-
-
 # Simulation Parameters
 dt = 0.001
-steps = 1500  # Roughly 1.5 simulated years
-
+steps = 3000  
 
 history_rk4 = np.zeros((steps, 4, 3))
+history_euler = np.zeros((steps, 4, 3))
 
-# Simulation Loop
+print("Simulation started...")
+
 for step in range(steps):
     history_rk4[step] = positions_rk4
+    history_euler[step] = positions_euler
+    
     positions_rk4, velocities_rk4 = rk4_step(positions_rk4, velocities_rk4, masses, dt)
     positions_euler, velocities_euler = euler_step(positions_euler, velocities_euler, masses, dt)
 
-# Visualization
-plt.figure(figsize=(10, 8))
+print("Simulation finished. Generating plot...")
 
-# 1. Plot the Sun as a single static marker (only its initial position)
-plt.plot(history_rk4[0, 0, 0], history_rk4[0, 0, 1], 'yo', markersize=15, label='Sun}')
+# --- 3D VISUALIZATION ---
+fig = plt.figure(figsize=(10, 8))
+ax = fig.add_subplot(111, projection='3d')
 
-# 2. Plot continuous paths for the moving bodies
-plt.plot(history_rk4[:, 1, 0], history_rk4[:, 1, 1], 'b-', label='Earth Path')
-plt.plot(history_rk4[:, 2, 0], history_rk4[:, 2, 1], 'r-', label='Mars Path')
-plt.plot(history_rk4[:, 3, 0], history_rk4[:, 3, 1], 'g--', label='Spaceship Path')
+ax.plot([history_rk4[0, 0, 0]], [history_rk4[0, 0, 1]], [history_rk4[0, 0, 2]], 
+        'yo', markersize=15, label='Sun')
 
-plt.title('Orbital Simulation: Spaceship Transfer')
-plt.xlabel('x (AU)')
-plt.ylabel('y (AU)')
-plt.legend()
-plt.grid(True)
-plt.axis('equal') # Ensures circular orbits aren't visually distorted
-plt.show()
+ax.plot(history_rk4[:, 1, 0], history_rk4[:, 1, 1], history_rk4[:, 1, 2], 'b-', label='Earth')
+ax.plot(history_rk4[:, 2, 0], history_rk4[:, 2, 1], history_rk4[:, 2, 2], 'r-', label='Mars')
+ax.plot(history_rk4[:, 3, 0], history_rk4[:, 3, 1], history_rk4[:, 3, 2], 'g--', label='Spaceship')
+
+ax.set_title('Orbital Simulation: Spaceship Transfer (3D)')
+ax.set_xlabel('x (AU)')
+ax.set_ylabel('y (AU)')
+ax.set_zlabel('z (AU)')
+ax.legend()
+ax.set_box_aspect([1, 1, 1])
+
+plt.show(block=True)
